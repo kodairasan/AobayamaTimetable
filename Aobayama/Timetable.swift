@@ -19,6 +19,14 @@ struct Timetable: Codable {
     let entries: [TimetableEntry]
 }
 
+struct TrainInfo {
+    let hour: Int
+    let minute: Int
+    let minutesUntil: Int
+    let secondsUntil: Int
+    let isNextDay: Bool
+}
+
 struct TimetableManager {
     private var timetable: Timetable?
     
@@ -102,6 +110,96 @@ struct TimetableManager {
         let seconds = totalSecondsUntilNext % 60
         
         return (minutes: minutes, seconds: seconds)
+    }
+    
+    func getNextTrains(count: Int = 3) -> [TrainInfo] {
+        guard let timetable = timetable else { return [] }
+        
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.hour, .minute, .second, .weekday], from: now)
+        guard let currentHour = components.hour,
+              let currentMinute = components.minute,
+              let currentSecond = components.second,
+              let weekday = components.weekday else {
+            return []
+        }
+        
+        // 1=日曜日、7=土曜日。日本の祝日判定は簡易的に土日を祝日として扱う
+        let isHoliday = weekday == 1 || weekday == 7
+        
+        // 現在時刻を秒に変換
+        let currentTimeInSeconds = currentHour * 3600 + currentMinute * 60 + currentSecond
+        
+        // すべての未来の電車時刻を収集
+        var trainTimes: [(hour: Int, minute: Int, seconds: Int)] = []
+        
+        // 今日の残りの時刻をチェック
+        for entry in timetable.entries {
+            guard entry.hour >= currentHour else { continue }
+            
+            let minutes = isHoliday ? entry.holiday : entry.weekday
+            
+            for minute in minutes {
+                let trainTimeInSeconds = entry.hour * 3600 + minute * 60
+                
+                if trainTimeInSeconds > currentTimeInSeconds {
+                    trainTimes.append((hour: entry.hour, minute: minute, seconds: trainTimeInSeconds))
+                }
+            }
+        }
+        
+        // 今日見つからなければ、翌日の電車も追加
+        if trainTimes.isEmpty {
+            for entry in timetable.entries {
+                let minutes = isHoliday ? entry.holiday : entry.weekday
+                
+                for minute in minutes {
+                    let trainTimeInSeconds = entry.hour * 3600 + minute * 60
+                    trainTimes.append((hour: entry.hour, minute: minute, seconds: trainTimeInSeconds + 24 * 3600))
+                }
+            }
+        } else {
+            // 今日の電車が少ない場合は、翌日の電車も追加
+            if trainTimes.count < count {
+                for entry in timetable.entries {
+                    let minutes = isHoliday ? entry.holiday : entry.weekday
+                    
+                    for minute in minutes {
+                        let trainTimeInSeconds = entry.hour * 3600 + minute * 60
+                        trainTimes.append((hour: entry.hour, minute: minute, seconds: trainTimeInSeconds + 24 * 3600))
+                    }
+                }
+            }
+        }
+        
+        // 時刻順にソート
+        trainTimes.sort { $0.seconds < $1.seconds }
+        
+        // 指定された数の電車情報を返す
+        var result: [TrainInfo] = []
+        for i in 0..<min(count, trainTimes.count) {
+            let train = trainTimes[i]
+            let totalSecondsUntil = train.seconds - currentTimeInSeconds
+            guard totalSecondsUntil >= 0 else { continue }
+            
+            // 翌日の電車かどうかを判定（24時間以上先なら翌日）
+            // train.secondsに24*3600が加算されている場合は翌日の電車
+            let isNextDay = train.seconds >= 24 * 3600
+            
+            let minutesUntil = totalSecondsUntil / 60
+            let secondsUntil = totalSecondsUntil % 60
+            
+            result.append(TrainInfo(
+                hour: train.hour,
+                minute: train.minute,
+                minutesUntil: minutesUntil,
+                secondsUntil: secondsUntil,
+                isNextDay: isNextDay
+            ))
+        }
+        
+        return result
     }
 }
 

@@ -14,6 +14,7 @@ class StatusBarManager: ObservableObject {
     private var timer: Timer?
     private var timetableManager = TimetableManager()
     @Published var nextTrainTime: (minutes: Int, seconds: Int)? = nil
+    @Published var nextTrains: [TrainInfo] = []
     
     init() {
         setupStatusBar()
@@ -31,7 +32,7 @@ class StatusBarManager: ObservableObject {
             let menu = NSMenu()
             
             let menuView = NSHostingView(rootView: MenuView().environmentObject(self))
-            menuView.frame = NSRect(x: 0, y: 0, width: 200, height: 120)
+            menuView.frame = NSRect(x: 0, y: 0, width: 240, height: 170)
             
             let menuItem = NSMenuItem()
             menuItem.view = menuView
@@ -67,6 +68,7 @@ class StatusBarManager: ObservableObject {
     
     private func updateNextTrainTime() {
         nextTrainTime = timetableManager.getNextTrainTime()
+        nextTrains = timetableManager.getNextTrains(count: 3)
         updateStatusBarTitle()
     }
     
